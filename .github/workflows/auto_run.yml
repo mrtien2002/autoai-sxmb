@@ -1,0 +1,29 @@
+name: AutoAI SXMB Runner
+on:
+  schedule:
+    - cron: "0 */4 * * *"   # chạy mỗi 4 giờ
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run AutoAI SXMB
+        run: python -m src.cli.run --pipeline full --topk 15
+      - name: Upload exports
+        uses: actions/upload-artifact@v4
+        with:
+          name: exports
+          path: exports/
+      - name: Upload reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports
+          path: reports/
