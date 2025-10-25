@@ -2,7 +2,7 @@ name: Auto Update Data Master (XSMB)
 
 on:
   schedule:
-    - cron: "30 11 * * *"   # chạy lúc 18h30 giờ Việt Nam (UTC+7)
+    - cron: "30 11 * * *"   # chạy 18h30 giờ Việt Nam
   workflow_dispatch:
 
 jobs:
@@ -29,26 +29,36 @@ jobs:
           python <<'PY'
           import pandas as pd, requests, re, os
           from bs4 import BeautifulSoup
+          from datetime import datetime
 
           url = "https://ketqua.net/xo-so-mien-bac"
           html = requests.get(url, timeout=20).text
           soup = BeautifulSoup(html, "lxml")
 
-          # Lấy ngày quay
-          title = soup.select_one("h2.title-xsmb").get_text(strip=True)
-          day = re.search(r"(\d{1,2}/\d{1,2}/\d{4})", title).group(1)
+          # ---- Lấy ngày quay an toàn ----
+          title_tag = soup.select_one("h2.title-xsmb") or soup.find("h2")
+          if title_tag:
+              title = title_tag.get_text(strip=True)
+              m = re.search(r"(\d{1,2}/\d{1,2}/\d{4})", title)
+              if m:
+                  day = m.group(1)
+              else:
+                  day = datetime.now().strftime("%d/%m/%Y")
+          else:
+              day = datetime.now().strftime("%d/%m/%Y")
+              print(f"⚠️ Không tìm thấy tiêu đề ngày, dùng ngày hệ thống {day}")
 
-          # Lấy toàn bộ các số 2 chữ cuối (00–99)
-          numbers = [x.get_text(strip=True)[-2:] for x in soup.select("table.bkqmienbac td span")]
+          # ---- Lấy danh sách số ----
+          numbers = [x.get_text(strip=True)[-2:] for x in soup.select("table.bkqmienbac td span") if x.get_text(strip=True)]
           if not numbers:
-              raise Exception("❌ Không lấy được dữ liệu XSMB từ trang ketqua.net")
+              raise Exception("❌ Không thể lấy dữ liệu số XSMB từ trang ketqua.net")
 
           new_row = {"Ngày": day, "Kết quả": ",".join(numbers)}
           df_new = pd.DataFrame([new_row])
 
           file_path = "data/data_master.csv"
+          os.makedirs("data", exist_ok=True)
           if not os.path.exists(file_path):
-              os.makedirs("data", exist_ok=True)
               df_new.to_csv(file_path, index=False)
               print(f"🆕 Tạo mới file data_master.csv với ngày {day}")
           else:
@@ -59,7 +69,6 @@ jobs:
                   df_final = pd.concat([df_new, df_old], ignore_index=True)
                   df_final.to_csv(file_path, index=False)
                   print(f"✅ Đã thêm dữ liệu mới: {day} lên đầu file data_master.csv")
-
           PY
 
       - name: 💾 Commit and push updates
