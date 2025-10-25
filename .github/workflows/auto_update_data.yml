@@ -1,8 +1,8 @@
-name: Auto Update Data Master
+name: Auto Update Data Master (XSMB)
 
 on:
   schedule:
-    - cron: "30 11 * * *"   # chạy lúc 18h30 giờ Việt Nam
+    - cron: "30 11 * * *"   # chạy lúc 18h30 giờ Việt Nam (UTC+7)
   workflow_dispatch:
 
 jobs:
@@ -12,47 +12,60 @@ jobs:
       contents: write
 
     steps:
-      - name: Checkout repo
+      - name: 🧩 Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Python
+      - name: 🐍 Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
-        run: pip install requests pandas beautifulsoup4 lxml
-
-      - name: Fetch latest XSMB result and prepend to data_master.csv
+      - name: 📦 Install dependencies
         run: |
-          import pandas as pd, requests, re
-          from datetime import datetime
+          pip install requests pandas beautifulsoup4 lxml
+
+      - name: 🔄 Fetch latest XSMB result and prepend to data_master.csv
+        run: |
+          python <<'PY'
+          import pandas as pd, requests, re, os
           from bs4 import BeautifulSoup
 
-          # Lấy dữ liệu từ ketqua.net
           url = "https://ketqua.net/xo-so-mien-bac"
           html = requests.get(url, timeout=20).text
           soup = BeautifulSoup(html, "lxml")
-          day = soup.select_one("h2.title-xsmb").get_text(strip=True)
-          day = re.search(r"(\d{1,2}/\d{1,2}/\d{4})", day).group(1)
-          prizes = [x.get_text(strip=True) for x in soup.select("table.bkqmienbac td span")]
-          new_row = {"Ngày": day, "Kết quả": ",".join(prizes)}
 
+          # Lấy ngày quay
+          title = soup.select_one("h2.title-xsmb").get_text(strip=True)
+          day = re.search(r"(\d{1,2}/\d{1,2}/\d{4})", title).group(1)
+
+          # Lấy toàn bộ các số 2 chữ cuối (00–99)
+          numbers = [x.get_text(strip=True)[-2:] for x in soup.select("table.bkqmienbac td span")]
+          if not numbers:
+              raise Exception("❌ Không lấy được dữ liệu XSMB từ trang ketqua.net")
+
+          new_row = {"Ngày": day, "Kết quả": ",".join(numbers)}
           df_new = pd.DataFrame([new_row])
-          df_old = pd.read_csv("data/data_master.csv")
 
-          # Kiểm tra nếu ngày đã có rồi thì bỏ qua
-          if str(df_old.iloc[0,0]) == day:
-              print(f"⚠️ Dữ liệu {day} đã có, không thêm mới.")
+          file_path = "data/data_master.csv"
+          if not os.path.exists(file_path):
+              os.makedirs("data", exist_ok=True)
+              df_new.to_csv(file_path, index=False)
+              print(f"🆕 Tạo mới file data_master.csv với ngày {day}")
           else:
-              df_final = pd.concat([df_new, df_old], ignore_index=True)
-              df_final.to_csv("data/data_master.csv", index=False)
-              print(f"✅ Đã thêm dữ liệu mới: {day} lên đầu file data_master.csv")
+              df_old = pd.read_csv(file_path)
+              if str(df_old.iloc[0,0]) == day:
+                  print(f"⚠️ Dữ liệu {day} đã tồn tại, bỏ qua cập nhật.")
+              else:
+                  df_final = pd.concat([df_new, df_old], ignore_index=True)
+                  df_final.to_csv(file_path, index=False)
+                  print(f"✅ Đã thêm dữ liệu mới: {day} lên đầu file data_master.csv")
 
-      - name: Commit and push updates
+          PY
+
+      - name: 💾 Commit and push updates
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
-          git add data/data_master.csv
-          git commit -m "Auto update data_master.csv"
-          git push
+          git add data/data_master.csv || echo "Không có thay đổi nào để commit"
+          git commit -m "Auto update data_master.csv" || echo "Không có commit mới"
+          git push || echo "Không có gì để push"
