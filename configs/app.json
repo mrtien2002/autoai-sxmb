@@ -1,0 +1,13 @@
+{
+  "timezone": "Asia/Bangkok",
+  "date_format": "%d/%m/%Y",
+  "paths": {
+    "data_master": "data/data_master.csv",
+    "exports": "exports",
+    "reports": "reports",
+    "logs": "logs"
+  },
+  "predict": {
+    "topk": 15
+  }
+}
